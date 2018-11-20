@@ -1,21 +1,84 @@
 #include <opencv2/opencv.hpp>
+#include<math.h>
+#include<vector>
+#include"custom_basic.h"
 using namespace std;
 using namespace cv;
+
+//全局变量
+float cast_NNO = 0.0, M_cr = 0.0, D_cr = 0.0;
+
 /********************************************************************************************
-*函数描述：  calcCast    计算并返回一幅图像的色偏度以及，色偏方向
-*函数参数：  InputImg    需要计算的图片，BGR存放格式，彩色（3通道），灰度图无效
-*           cast        计算出的偏差值，小于1表示比较正常，大于1表示存在色偏
-*           da          红/绿色偏估计值，da大于0，表示偏红；da小于0表示偏绿
-*           db          黄/蓝色偏估计值，db大于0，表示偏黄；db小于0表示偏蓝
-*函数返回值： 返回值通过cast、da、db三个应用返回，无显式返回值
+*函数描述：  computeNNO    计算NNO(near neutral objects)区域
+*函数参数：  LABimg   Lab色彩空间的图像
+*函数返回值： bool类型的二维数组
 *********************************************************************************************/
-void colorException(Mat InputImg,float& cast,float& da,float& db)
+vector<vector<bool> > computeNNO(Mat LABimg)
 {
-    Mat LABimg;
-    cvtColor(InputImg,LABimg,CV_BGR2Lab);//参考http://blog.csdn.net/laviewpbt/article/details/9335767
-                                       //由于OpenCV定义的格式是uint8，这里输出的LABimg从标准的0～100，-127～127，-127～127，被映射到了0～255，0～255，0～255空间
+	vector<vector<bool> > NNO;
+	float a = 0.0, b = 0.0, maxd2 = 0.0, d = 0.0;
+	for(int i=0;i<LABimg.rows;i++)
+	{
+		for(int j=0;j<LABimg.cols;j++)
+		{
+			a = float(LABimg.at<cv::Vec3b>(i,j)[1]-128);
+			b = float(LABimg.at<cv::Vec3b>(i,j)[2]-128);
+			float thisd2 = a*a + b*b;
+			if(maxd2 < thisd2){
+				maxd2 = thisd2;
+			}
+		}
+	}
+	d = sqrt(maxd2);
+	for(int i=0;i<LABimg.rows;i++){
+		vector<bool> thisLine;
+		for(int j=0;j<LABimg.cols;j++){
+			float L = float(LABimg.at<cv::Vec3b>(i,j)[0] * 100 / 255);
+			a = float(LABimg.at<cv::Vec3b>(i,j)[1]-128);
+			b = float(LABimg.at<cv::Vec3b>(i,j)[2]-128);
+			if(L >=35 && L <=95 && sqrt(a*a + b*b) <= d/4)
+				thisLine.push_back(true);
+			else
+				thisLine.push_back(false);
+		}
+		NNO.push_back(thisLine);
+	}
+    //处理孤立点
+    for(int i=0;i<LABimg.rows;i++)
+    	for(int j=0;j<LABimg.cols;j++){
+    		if(NNO[i][j] == true){
+    			int LeftTopX = max(0, i-1);
+    			int LeftTopY = max(0, j-1);
+    			int RightBottomX = min(LABimg.rows-1, i+1);
+    			int RightBottomY = min(LABimg.cols-1, j+1);
+    			bool Alone = true;
+    			for(int m=LeftTopX;m<=RightBottomX;m++)
+    				for(int n=LeftTopY;n<=RightBottomY;n++){
+    					if(m==i && n==j)
+    						continue;
+    					if(NNO[m][n] == true){
+    						Alone = false;
+    						break;
+    					}
+    				}
+    			if(Alone == true)
+    				NNO[i][j] = false;
+    		}
+    	}
+	return NNO;
+}
+
+/********************************************************************************************
+*函数描述：  computeEC		计算并返回一幅图像的Lab色彩空间等价圆信息
+*函数参数：  LABimg		Lab色彩空间的图像
+*函数参数：  NNO		NNO区域二值图
+*函数参数：
+*函数返回值： 返回值通过五个引用返回，无显式返回值
+*********************************************************************************************/
+void computeEC(Mat LABimg, vector<vector<bool> > NNO, float& cast, float& da, float& db, float& D, float& M)
+{
     float a=0,b=0;
-    int HistA[256],HistB[256];
+    int HistA[256],HistB[256], NNO_count=0;
     for(int i=0;i<256;i++)
     {
         HistA[i]=0;
@@ -25,38 +88,153 @@ void colorException(Mat InputImg,float& cast,float& da,float& db)
     {
         for(int j=0;j<LABimg.cols;j++)
         {
-            a+=float(LABimg.at<cv::Vec3b>(i,j)[1]-128);//在计算过程中，要考虑将CIE L*a*b*空间还原 后同
-            b+=float(LABimg.at<cv::Vec3b>(i,j)[2]-128);
-            int x=LABimg.at<cv::Vec3b>(i,j)[1];
-            int y=LABimg.at<cv::Vec3b>(i,j)[2];
-            HistA[x]++;
-            HistB[y]++;
+        	if(NNO[i][j] == true){
+				a+=float(LABimg.at<cv::Vec3b>(i,j)[1]-128);//在计算过程中，要考虑将CIE L*a*b*空间还原 后同
+				b+=float(LABimg.at<cv::Vec3b>(i,j)[2]-128);
+				int x=LABimg.at<cv::Vec3b>(i,j)[1];
+				int y=LABimg.at<cv::Vec3b>(i,j)[2];
+				HistA[x]++;
+				HistB[y]++;
+				NNO_count++;
+        	}
         }
     }
-    da=a/float(LABimg.rows*LABimg.cols);
-    db=b/float(LABimg.rows*LABimg.cols);
-    float D =sqrt(da*da+db*db);
+    da=a/float(NNO_count);
+    db=b/float(NNO_count);
+    D =sqrt(da*da+db*db);
     float Ma=0,Mb=0;
     for(int i=0;i<256;i++)
     {
-        Ma+=abs(i-128-da)*HistA[i];//计算范围-128～127
-        Mb+=abs(i-128-db)*HistB[i];
+        Ma+=pow(i-128-da, 2)*HistA[i];//计算范围-128～127
+        Mb+=pow(i-128-db, 2)*HistB[i];
     }
-    Ma/=float((LABimg.rows*LABimg.cols));
-    Mb/=float((LABimg.rows*LABimg.cols));
-    float M=sqrt(Ma*Ma+Mb*Mb);
-    float K=D/M;
+    Ma/=float((NNO_count));
+    Mb/=float((NNO_count));
+    M=sqrt(Ma+Mb);
+    float K=(D - M) / M;
     cast = K;
     return;
 }
 
+/********************************************************************************************
+*函数描述：  castClassification    对初步判断为色偏的图像进行分类，判别真实色偏与本质色偏
+*函数参数：  LABimg    Lab色彩空间图像
+*函数参数：  D 				Lab色彩空间等价圆圆心距中性轴距离
+*函数参数：  M				Lab色彩空间等价圆半径
+*函数返回值： 无返回值，直接打印判别结果
+*********************************************************************************************/
+void castClassification(Mat LABimg, float D, float M)
+{
+	//统计L分量直方图并初步筛选本质色偏图像
+	int HistL[101];
+	for(int i=0;i<101;i++)
+		HistL[i] = 0;
+	for(int i=0;i<LABimg.rows;i++)
+		for(int j=0;j<LABimg.cols;j++){
+			int L = int(LABimg.at<cv::Vec3b>(i,j)[0] * 100 / 255);
+			HistL[L] ++;
+		}
+	int maxLIndex = 0;
+	int maxL = HistL[maxLIndex];
+	for(int i=0;i<101;i++){
+		if(maxL < HistL[i]){
+			maxL = HistL[i];
+			maxLIndex = i;
+		}
+	}
+	for(int i=0;i<101;i++){
+		if(HistL[i] < maxL / 100)
+			HistL[i] = 0;
+	}
+	int firstNoZeroIndex = 0;
+	int lastNoZeroIndex = 0;
+	for(int i=0;i<101;i++){
+		if(HistL[i] != 0){
+			firstNoZeroIndex = i;
+			break;
+		}
+	}
+	for(int j=100;j>=0;j--){
+		if(HistL[j] != 0){
+			lastNoZeroIndex = j;
+			break;
+		}
+	}
+	int LRange = lastNoZeroIndex - firstNoZeroIndex;
+	if(maxLIndex - firstNoZeroIndex <= LRange * 0.8 ){
+		printf("本质色偏！！！\n");
+		return;
+	}
+	if(FLT_EQUALS(M_cr, 0.0)){
+		vector<vector<bool> > NNO = computeNNO(LABimg);
+		float  da_NNO = 0.0, db_NNO = 0.0, D_NNO = 0.0, M_NNO = 0.0;
+		computeEC(LABimg, NNO, cast_NNO, da_NNO, db_NNO, D_NNO, M_NNO);
+		M_cr = (M - M_NNO) / M;
+		D_cr = (D - D_NNO) / D;
+	}
+	if(cast_NNO < -0.3 && M_cr > 0.7 && D_cr > 0.6){
+		printf("本质色偏！！！\n");
+	}
+	else{
+		printf("真实色偏！！！\n");
+	}
+	return;
+}
+
+
+
+/********************************************************************************************
+*函数描述：  secondTest    对初步判断为非色偏的图像进行二次检测
+*函数参数：  LABimg    Lab色彩空间的图像
+*函数返回值： 无返回值，直接打印检测结果
+*********************************************************************************************/
+void secondTest(Mat LABimg, float D, float M)
+{
+	vector<vector<bool> > NNO = computeNNO(LABimg);
+	float da_NNO = 0.0, db_NNO = 0.0, D_NNO = 0.0, M_NNO = 0.0;
+	computeEC(LABimg, NNO, cast_NNO, da_NNO, db_NNO, D_NNO, M_NNO);
+	M_cr = (M - M_NNO) / M;
+	D_cr = (D - D_NNO) / D;
+	if(cast_NNO < -0.5 || (M_cr > 0.7 && D_cr > 0.6)){
+		printf("非色偏图像！！！\n");
+	}
+	else if(cast_NNO <= 0.5 || (M_cr <= 0.4 && D_cr <= 0.3)){
+		printf("色偏图像！！！接下来进行色偏分类...\n");
+		castClassification(LABimg, D, M);
+	}
+	else{
+		printf("无法识别！！！\n");
+	}
+	return;
+}
+
+//主函数
 int main(){
-	Mat image = imread("/Users/bean/Downloads/sky.jpeg");
+	Mat image = imread("/Users/bean/Colorcast/blue.jpeg");
 	imshow("源图像",image);
 	printf("\n 色偏检测\n\n");
-    float x = 0.0, y = 0.0, z = 0.0;
-	colorException(image, x, y, z);
-	printf("x=%f; y=%f; z=%f", x, y, z);
+	Mat LABimg;
+	cvtColor(image,LABimg,CV_BGR2Lab);//参考http://blog.csdn.net/laviewpbt/article/details/9335767
+	                                       //由于OpenCV定义的格式是uint8，这里输出的LABimg从标准的0～100，-127～127，-127～127，被映射到了0～255，0～255，0～255空间
+
+	vector<vector<bool> > NNO_all;
+	for(int i=0;i<LABimg.rows;i++){
+		vector<bool> thisLine;
+		for(int j=0;j<LABimg.cols;j++)
+			thisLine.push_back(true);
+		NNO_all.push_back(thisLine);
+	}
+	float cast = 0.0, da = 0.0, db = 0.0, D = 0.0, M = 0.0;
+	computeEC(LABimg, NNO_all, cast, da, db, D, M);
+	printf("cast=%f; da=%f; db=%f; D=%f; M=%f\n", cast, da, db, D, M);
+	if((D > 10 && cast > 0.6) || cast > 1.5){
+		printf("初步判断为色偏，接下来进行色偏分类...\n");
+		castClassification(LABimg, D, M);
+	}
+	else{
+		printf("初步判断为非色偏，接下来进行二次检测...\n");
+		secondTest(LABimg, D, M);
+	}
 	printf("\n");
 	cvWaitKey(0);
 	return 0;
