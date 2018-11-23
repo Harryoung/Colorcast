@@ -210,7 +210,7 @@ void secondTest(Mat LABimg, float D, float M)
 
 //主函数
 int main(){
-	Mat image = imread("/Users/bean/Colorcast/blue.jpeg");
+	Mat image = imread("/Users/bean/Colorcast/sky.jpeg");
 	imshow("源图像",image);
 	printf("\n 色偏检测\n\n");
 	Mat LABimg;
