@@ -39,19 +39,19 @@ void colorException(Mat InputImg,float& cast,float& da,float& db)
     float Ma=0,Mb=0;
     for(int i=0;i<256;i++)
     {
-        Ma+=abs(i-128-da)*HistA[i];//计算范围-128～127
-        Mb+=abs(i-128-db)*HistB[i];
+        Ma+=pow(abs(i-128-da),2)*HistA[i];//计算范围-128～127
+        Mb+=pow(abs(i-128-db),2)*HistB[i];
     }
     Ma/=float((LABimg.rows*LABimg.cols));
     Mb/=float((LABimg.rows*LABimg.cols));
-    float M=sqrt(Ma*Ma+Mb*Mb);
+    float M=sqrt(Ma+Mb);
     float K=D/M;
     cast = K;
     return;
 }
 
 int main(){
-	Mat image = imread("/Users/bean/Downloads/sky.jpeg");
+	Mat image = imread("/Users/bean/Colorcast/image1.jpeg");
 	imshow("源图像",image);
 	printf("\n 色偏检测\n\n");
     float x = 0.0, y = 0.0, z = 0.0;
