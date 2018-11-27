@@ -9,6 +9,54 @@ using namespace cv;
 float cast_NNO = 0.0, M_cr = 0.0, D_cr = 0.0;
 
 /********************************************************************************************
+*函数描述：  meanValue    计算均值
+*函数参数：  image    BGR图像
+*函数返回值： 浮点型的均值
+*********************************************************************************************/
+float meanValue(Mat image){
+	float mean = 0.0;
+	for(int i=0;i<image.rows;i++)
+		for(int j=0;j<image.cols;j++)
+			mean += image.at<uchar>(i,j);
+	mean /= float(image.rows*image.cols);
+	return mean;
+}
+/********************************************************************************************
+*函数描述：  stdev    计算标准差
+*函数参数：  iamge    BGR图像
+*函数参数：  mean		均值
+*函数返回值： 浮点型的标准差值
+*********************************************************************************************/
+float stdev(Mat image, float mean){
+	float stdev = 0.0;
+	for(int i=0;i<image.rows;i++)
+			for(int j=0;j<image.cols;j++)
+				stdev += pow(image.at<uchar>(i,j) - mean, 2);
+	stdev = sqrt(stdev / float(image.rows*image.cols));
+	return stdev;
+}
+
+/********************************************************************************************
+*函数描述：  computeCCI    计算色彩度CCI
+*函数参数：  image    BGR图像
+*函数返回值： 浮点型的色彩度值
+*********************************************************************************************/
+float computeCCI(Mat image){
+	Mat BGR[3];
+	split(image, BGR);
+	Mat rg = BGR[2] - BGR[1];
+	Mat yb = (BGR[2] + BGR[1]) / 2 - BGR[0];
+	float mu_rg = meanValue(rg);
+	float mu_yb = meanValue(yb);
+	float stdev_rg = stdev(rg, mu_rg);
+	float stdev_yb = stdev(yb, mu_yb);
+	float mu_rgyb = sqrt(mu_rg*mu_rg + mu_yb*mu_yb);
+	float stdev_rgyb = sqrt(stdev_rg*stdev_rg + stdev_yb* stdev_yb);
+	float CCI = stdev_rgyb + 0.3 * mu_rgyb;
+	return CCI;
+}
+
+/********************************************************************************************
 *函数描述：  computeNNO    计算NNO(near neutral objects)区域
 *函数参数：  LABimg   Lab色彩空间的图像
 *函数返回值： bool类型的二维数组
@@ -210,32 +258,33 @@ void secondTest(Mat LABimg, float D, float M)
 
 //主函数
 int main(){
-	Mat image = imread("/Users/bean/Colorcast/sky.jpeg");
-	imshow("源图像",image);
-	printf("\n 色偏检测\n\n");
-	Mat LABimg;
-	cvtColor(image,LABimg,CV_BGR2Lab);//参考http://blog.csdn.net/laviewpbt/article/details/9335767
-	                                       //由于OpenCV定义的格式是uint8，这里输出的LABimg从标准的0～100，-127～127，-127～127，被映射到了0～255，0～255，0～255空间
-
-	vector<vector<bool> > NNO_all;
-	for(int i=0;i<LABimg.rows;i++){
-		vector<bool> thisLine;
-		for(int j=0;j<LABimg.cols;j++)
-			thisLine.push_back(true);
-		NNO_all.push_back(thisLine);
-	}
-	float cast = 0.0, da = 0.0, db = 0.0, D = 0.0, M = 0.0;
-	computeEC(LABimg, NNO_all, cast, da, db, D, M);
-	printf("cast=%f; da=%f; db=%f; D=%f; M=%f\n", cast, da, db, D, M);
-	if((D > 10 && cast > 0.6) || cast > 1.5){
-		printf("初步判断为色偏，接下来进行色偏分类...\n");
-		castClassification(LABimg, D, M);
-	}
-	else{
-		printf("初步判断为非色偏，接下来进行二次检测...\n");
-		secondTest(LABimg, D, M);
-	}
-	printf("\n");
-	cvWaitKey(0);
+	Mat image = imread("/Users/bean/Colorcast/image6.jpeg");
+	float CCI = computeCCI(image);
+	printf("CCI: %f \n", CCI);
+//	printf("\n 色偏检测\n\n");
+//	Mat LABimg;
+//	cvtColor(image,LABimg,CV_BGR2Lab);//参考http://blog.csdn.net/laviewpbt/article/details/9335767
+//	                                       //由于OpenCV定义的格式是uint8，这里输出的LABimg从标准的0～100，-127～127，-127～127，被映射到了0～255，0～255，0～255空间
+//
+//	vector<vector<bool> > NNO_all;
+//	for(int i=0;i<LABimg.rows;i++){
+//		vector<bool> thisLine;
+//		for(int j=0;j<LABimg.cols;j++)
+//			thisLine.push_back(true);
+//		NNO_all.push_back(thisLine);
+//	}
+//	float cast = 0.0, da = 0.0, db = 0.0, D = 0.0, M = 0.0;
+//	computeEC(LABimg, NNO_all, cast, da, db, D, M);
+//	printf("cast=%f; da=%f; db=%f; D=%f; M=%f\n", cast, da, db, D, M);
+//	if((D > 10 && cast > 0.6) || cast > 1.5){
+//		printf("初步判断为色偏，接下来进行色偏分类...\n");
+//		castClassification(LABimg, D, M);
+//	}
+//	else{
+//		printf("初步判断为非色偏，接下来进行二次检测...\n");
+//		secondTest(LABimg, D, M);
+//	}
+//	printf("\n");
+//	cvWaitKey(0);
 	return 0;
 }
