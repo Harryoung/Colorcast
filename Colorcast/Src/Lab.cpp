@@ -22,7 +22,7 @@ float meanValue(Mat image, vector<vector<bool> >& NNO_all){
 	int count = 0;
 	for(int i=0;i<image.rows;i++)
 		for(int j=0;j<image.cols;j++){
-			if(image.at<cv::Vec3b>(i,j)[0] == 0 && image.at<cv::Vec3b>(i,j)[1] == 0 && image.at<cv::Vec3b>(i,j)[2] == 0){
+			if(!NNO_all[i][j]){
 				continue;
 			}
 			mean += image.at<uchar>(i,j);
@@ -43,7 +43,7 @@ float stdev(Mat image, float mean, vector<vector<bool> >& NNO_all){
 	int count = 0;
 	for(int i=0;i<image.rows;i++)
 		for(int j=0;j<image.cols;j++){
-			if(image.at<cv::Vec3b>(i,j)[0] == 0 && image.at<cv::Vec3b>(i,j)[1] == 0 && image.at<cv::Vec3b>(i,j)[2] == 0){
+			if(!NNO_all[i][j]){
 				continue;
 			}
 			stdev += pow(image.at<uchar>(i,j) - mean, 2);
@@ -252,7 +252,7 @@ int main(){
 	string abnormalDir = srcDir + "/AbnormalSamples";
 	string normalDir = srcDir + "/NormalSamples";
 	string dstPath = srcDir + "/train.txt";
-	ofstream out(dstPath.c_str(), ios::out | ios::app);
+	ofstream out(dstPath.c_str(), ios::out);
 	if (! out.is_open())
 	{ cout << "Error creating output file!!!" << endl; exit (1); }
 	out << "image\tcast\tda\tdb\tD\tM\tcast_NNO\tda_NNO\tdb_NNO\tD_NNO\tM_NNO\tM_cr\tD_cr\tCCI\tlabel" << endl;
