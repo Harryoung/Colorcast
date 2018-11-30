@@ -262,9 +262,9 @@ int main(){
 	int count = 0;
 	while((ptr = readdir(abnormalDIR)) != NULL) ///read the list of this dir
 	{
+		curImg =  ptr->d_name;
 		if(curImg.length() < 10)
 			continue;
-		curImg =  ptr->d_name;
 		computeFeatures(abnormalDir + "/" + curImg, dstPath, 1, out);
 		count++;
 		cout << curImg << " has been processed!!!" << " Current count:" << count << endl;
@@ -274,13 +274,14 @@ int main(){
 	DIR *normalDIR = opendir(normalDir.c_str());
 	while((ptr = readdir(normalDIR)) != NULL) ///read the list of this dir
 	{
+		curImg =  ptr->d_name;
 		if(curImg.length() < 10)
 			continue;
-		curImg =  ptr->d_name;
 		computeFeatures(normalDir + "/" + curImg, dstPath, 0, out);
 		count++;
 		cout << curImg << " has been processed!!!" << " Current count:" << count << endl;
 	}
 	closedir(normalDIR);
+	out.close();
 	return 0;
 }
