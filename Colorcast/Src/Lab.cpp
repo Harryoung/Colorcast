@@ -10,8 +10,6 @@
 
 using namespace std;
 using namespace cv;
-//全局变量
-float cast_NNO = 0.0, M_cr = 0.0, D_cr = 0.0;
 
 /********************************************************************************************
 *函数描述：  meanValue    计算均值
@@ -200,6 +198,7 @@ void secondTest(Mat image, Mat LABimg, float D, float M, ofstream& out)
 {
 	vector<vector<bool> > NNO = computeNNO(image, LABimg);
 	float da_NNO = 0.0, db_NNO = 0.0, D_NNO = 0.0, M_NNO = 0.0;
+	float cast_NNO = 0.0, M_cr = 0.0, D_cr = 0.0;
 	computeEC(LABimg, NNO, cast_NNO, da_NNO, db_NNO, D_NNO, M_NNO);
 	M_cr = (M - M_NNO) / M;
 	D_cr = (D - D_NNO) / D;
@@ -260,7 +259,7 @@ int main(){
 	struct dirent *ptr;
 	string curImg;
 	DIR *abnormalDIR = opendir(abnormalDir.c_str());
-	int count;
+	int count = 0;
 	while((ptr = readdir(abnormalDIR)) != NULL) ///read the list of this dir
 	    {
 			curImg =  ptr->d_name;
