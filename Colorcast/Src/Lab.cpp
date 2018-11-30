@@ -10,9 +10,71 @@
 
 using namespace std;
 using namespace cv;
-
 //全局变量
 float cast_NNO = 0.0, M_cr = 0.0, D_cr = 0.0;
+
+/********************************************************************************************
+*函数描述：  meanValue    计算均值
+*函数参数：  image    BGR图像
+*函数参数：  NNO_all	黑边掩膜
+*函数返回值： 浮点型的均值
+*********************************************************************************************/
+float meanValue(Mat image, vector<vector<bool> >& NNO_all){
+	float mean = 0.0;
+	int count = 0;
+	for(int i=0;i<image.rows;i++)
+		for(int j=0;j<image.cols;j++){
+			if(image.at<cv::Vec3b>(i,j)[0] == 0 && image.at<cv::Vec3b>(i,j)[1] == 0 && image.at<cv::Vec3b>(i,j)[2] == 0){
+				continue;
+			}
+			mean += image.at<uchar>(i,j);
+			count++;
+		}
+	mean /= float(count);
+	return mean;
+}
+/********************************************************************************************
+*函数描述：  stdev    计算标准差
+*函数参数：  iamge    BGR图像
+*函数参数：  mean		均值
+*函数参数：  NNO_all	黑边掩膜
+*函数返回值： 浮点型的标准差值
+*********************************************************************************************/
+float stdev(Mat image, float mean, vector<vector<bool> >& NNO_all){
+	float stdev = 0.0;
+	int count = 0;
+	for(int i=0;i<image.rows;i++)
+		for(int j=0;j<image.cols;j++){
+			if(image.at<cv::Vec3b>(i,j)[0] == 0 && image.at<cv::Vec3b>(i,j)[1] == 0 && image.at<cv::Vec3b>(i,j)[2] == 0){
+				continue;
+			}
+			stdev += pow(image.at<uchar>(i,j) - mean, 2);
+			count++;
+		}
+	stdev = sqrt(stdev / float(count));
+	return stdev;
+}
+
+/********************************************************************************************
+*函数描述：  computeCCI    计算色彩度CCI
+*函数参数：  image    BGR图像
+*函数参数：  NNO_all	黑边掩膜
+*函数返回值： 浮点型的色彩度值
+*********************************************************************************************/
+float computeCCI(Mat image, vector<vector<bool> >& NNO_all){
+	Mat BGR[3];
+	split(image, BGR);
+	Mat rg = BGR[2] - BGR[1];
+	Mat yb = (BGR[2] + BGR[1]) / 2 - BGR[0];
+	float mu_rg = meanValue(rg, NNO_all);
+	float mu_yb = meanValue(yb, NNO_all);
+	float stdev_rg = stdev(rg, mu_rg, NNO_all);
+	float stdev_yb = stdev(yb, mu_yb, NNO_all);
+	float mu_rgyb = sqrt(mu_rg*mu_rg + mu_yb*mu_yb);
+	float stdev_rgyb = sqrt(stdev_rg*stdev_rg + stdev_yb* stdev_yb);
+	float CCI = stdev_rgyb + 0.3 * mu_rgyb;
+	return CCI;
+}
 
 /********************************************************************************************
 *函数描述：  computeNNO    计算NNO(near neutral objects)区域
@@ -180,7 +242,7 @@ void computeFeatures(string srcImgPath, string outputPath, int label, ofstream& 
 	}
 	out << srcImgPath << "\t" << cast << "\t" << da <<"\t" << db <<"\t" << D << "\t" << M << "\t";
 	secondTest(image, LABimg, D, M, out);
-	float CCI = computeCCI();
+	float CCI = computeCCI(image, NNO_all);
 	out << CCI << "\t" << label << endl;
 	return;
 }
