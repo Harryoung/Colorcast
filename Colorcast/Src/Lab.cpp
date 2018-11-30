@@ -1,7 +1,13 @@
 #include <opencv2/opencv.hpp>
-#include<math.h>
-#include<vector>
-#include"custom_basic.h"
+#include <fstream>
+#include <math.h>
+#include <vector>
+#include "custom_basic.h"
+#include <sys/types.h>
+#include <dirent.h>
+#include <unistd.h>
+#include <stdio.h>
+
 using namespace std;
 using namespace cv;
 
@@ -10,10 +16,11 @@ float cast_NNO = 0.0, M_cr = 0.0, D_cr = 0.0;
 
 /********************************************************************************************
 *函数描述：  computeNNO    计算NNO(near neutral objects)区域
+*函数参数：  image   原图像
 *函数参数：  LABimg   Lab色彩空间的图像
 *函数返回值： bool类型的二维数组
 *********************************************************************************************/
-vector<vector<bool> > computeNNO(Mat LABimg)
+vector<vector<bool> > computeNNO(Mat image, Mat LABimg)
 {
 	vector<vector<bool> > NNO;
 	float a = 0.0, b = 0.0, maxd2 = 0.0, d = 0.0;
@@ -33,6 +40,10 @@ vector<vector<bool> > computeNNO(Mat LABimg)
 	for(int i=0;i<LABimg.rows;i++){
 		vector<bool> thisLine;
 		for(int j=0;j<LABimg.cols;j++){
+			if(image.at<cv::Vec3b>(i,j)[0] == 0 && image.at<cv::Vec3b>(i,j)[1] == 0 && image.at<cv::Vec3b>(i,j)[2] == 0){
+				thisLine.push_back(false);
+				continue;
+			}
 			float L = float(LABimg.at<cv::Vec3b>(i,j)[0] * 100 / 255);
 			a = float(LABimg.at<cv::Vec3b>(i,j)[1]-128);
 			b = float(LABimg.at<cv::Vec3b>(i,j)[2]-128);
@@ -115,127 +126,90 @@ void computeEC(Mat LABimg, vector<vector<bool> > NNO, float& cast, float& da, fl
     cast = K;
     return;
 }
-
 /********************************************************************************************
-*函数描述：  castClassification    对初步判断为色偏的图像进行分类，判别真实色偏与本质色偏
-*函数参数：  LABimg    Lab色彩空间图像
-*函数参数：  D 				Lab色彩空间等价圆圆心距中性轴距离
-*函数参数：  M				Lab色彩空间等价圆半径
-*函数返回值： 无返回值，直接打印判别结果
-*********************************************************************************************/
-void castClassification(Mat LABimg, float D, float M)
-{
-	//统计L分量直方图并初步筛选本质色偏图像
-	int HistL[101];
-	for(int i=0;i<101;i++)
-		HistL[i] = 0;
-	for(int i=0;i<LABimg.rows;i++)
-		for(int j=0;j<LABimg.cols;j++){
-			int L = int(LABimg.at<cv::Vec3b>(i,j)[0] * 100 / 255);
-			HistL[L] ++;
-		}
-	int maxLIndex = 0;
-	int maxL = HistL[maxLIndex];
-	for(int i=0;i<101;i++){
-		if(maxL < HistL[i]){
-			maxL = HistL[i];
-			maxLIndex = i;
-		}
-	}
-	for(int i=0;i<101;i++){
-		if(HistL[i] < maxL / 100)
-			HistL[i] = 0;
-	}
-	int firstNoZeroIndex = 0;
-	int lastNoZeroIndex = 0;
-	for(int i=0;i<101;i++){
-		if(HistL[i] != 0){
-			firstNoZeroIndex = i;
-			break;
-		}
-	}
-	for(int j=100;j>=0;j--){
-		if(HistL[j] != 0){
-			lastNoZeroIndex = j;
-			break;
-		}
-	}
-	int LRange = lastNoZeroIndex - firstNoZeroIndex;
-	if(maxLIndex - firstNoZeroIndex <= LRange * 0.8 ){
-		printf("本质色偏！！！\n");
-		return;
-	}
-	if(FLT_EQUALS(M_cr, 0.0)){
-		vector<vector<bool> > NNO = computeNNO(LABimg);
-		float  da_NNO = 0.0, db_NNO = 0.0, D_NNO = 0.0, M_NNO = 0.0;
-		computeEC(LABimg, NNO, cast_NNO, da_NNO, db_NNO, D_NNO, M_NNO);
-		M_cr = (M - M_NNO) / M;
-		D_cr = (D - D_NNO) / D;
-	}
-	if(cast_NNO < -0.3 && M_cr > 0.7 && D_cr > 0.6){
-		printf("本质色偏！！！\n");
-	}
-	else{
-		printf("真实色偏！！！\n");
-	}
-	return;
-}
-
-
-
-/********************************************************************************************
-*函数描述：  secondTest    对初步判断为非色偏的图像进行二次检测
+*函数描述：  secondTest    计算cast_NNO, da_NNO, db_NNO, D_NNO, M_NNO, M_cr, D_cr特征
+*函数参数：  iamge    原图像
 *函数参数：  LABimg    Lab色彩空间的图像
+*函数参数：  D，M		原图像参数D，M
+*函数参数：  out		输出文件
 *函数返回值： 无返回值，直接打印检测结果
 *********************************************************************************************/
-void secondTest(Mat LABimg, float D, float M)
+void secondTest(Mat image, Mat LABimg, float D, float M, ofstream& out)
 {
-	vector<vector<bool> > NNO = computeNNO(LABimg);
+	vector<vector<bool> > NNO = computeNNO(image, LABimg);
 	float da_NNO = 0.0, db_NNO = 0.0, D_NNO = 0.0, M_NNO = 0.0;
 	computeEC(LABimg, NNO, cast_NNO, da_NNO, db_NNO, D_NNO, M_NNO);
 	M_cr = (M - M_NNO) / M;
 	D_cr = (D - D_NNO) / D;
-	if(cast_NNO < -0.5 || (M_cr > 0.7 && D_cr > 0.6)){
-		printf("非色偏图像！！！\n");
+	if(! out.is_open())
+	{
+		cout << "Error opening output file!!!" << endl;
+		exit(1);
 	}
-	else if(cast_NNO <= 0.5 || (M_cr <= 0.4 && D_cr <= 0.3)){
-		printf("色偏图像！！！接下来进行色偏分类...\n");
-		castClassification(LABimg, D, M);
+	out << cast_NNO << "\t" << da_NNO << "\t" << db_NNO <<"\t" << D_NNO <<"\t" << M_NNO << "\t" << M_cr << "\t" << D_cr << "\t";
+	return;
+}
+/********************************************************************************************
+*函数描述：  computeFeatures    计算特征并写入文本文件
+*函数参数：  srcImg    输入图像全路径
+*函数参数：  outputPath		输出文件路径
+*函数参数：  lable		标签：0-正常，1-异常
+*函数返回值： 无返回值，写入到文件
+*********************************************************************************************/
+void computeFeatures(string srcImgPath, string outputPath, int label, ofstream& out){
+	Mat image = imread(srcImgPath.c_str());
+	Mat LABimg;
+	cvtColor(image,LABimg,CV_BGR2Lab);
+	vector<vector<bool> > NNO_all;
+	for(int i=0;i<LABimg.rows;i++){
+		vector<bool> thisLine;
+		for(int j=0;j<LABimg.cols;j++){
+			if(image.at<cv::Vec3b>(i,j)[0] == 0 && image.at<cv::Vec3b>(i,j)[1] == 0 && image.at<cv::Vec3b>(i,j)[2] == 0)
+				thisLine.push_back(false);
+			else
+				thisLine.push_back(true);
+		}
+		NNO_all.push_back(thisLine);
 	}
-	else{
-		printf("无法识别！！！\n");
+	float cast = 0.0, da = 0.0, db = 0.0, D = 0.0, M = 0.0;
+	computeEC(LABimg, NNO_all, cast, da, db, D, M);
+	if(! out.is_open())
+	{
+		cout << "Error opening output file!!!" << endl;
+		exit(1);
 	}
+	out << srcImgPath << "\t" << cast << "\t" << da <<"\t" << db <<"\t" << D << "\t" << M << "\t";
+	secondTest(image, LABimg, D, M, out);
+	float CCI = computeCCI();
+	out << CCI << "\t" << label << endl;
 	return;
 }
 
 //主函数
 int main(){
-	Mat image = imread("/Users/bean/Colorcast/test.png");
-	imshow("源图像",image);
-	printf("\n 色偏检测\n\n");
-	Mat LABimg;
-	cvtColor(image,LABimg,CV_BGR2Lab);//参考http://blog.csdn.net/laviewpbt/article/details/9335767
-	                                       //由于OpenCV定义的格式是uint8，这里输出的LABimg从标准的0～100，-127～127，-127～127，被映射到了0～255，0～255，0～255空间
-
-	vector<vector<bool> > NNO_all;
-	for(int i=0;i<LABimg.rows;i++){
-		vector<bool> thisLine;
-		for(int j=0;j<LABimg.cols;j++)
-			thisLine.push_back(true);
-		NNO_all.push_back(thisLine);
-	}
-	float cast = 0.0, da = 0.0, db = 0.0, D = 0.0, M = 0.0;
-	computeEC(LABimg, NNO_all, cast, da, db, D, M);
-	printf("cast=%f; da=%f; db=%f; D=%f; M=%f\n", cast, da, db, D, M);
-	if((D > 10 && cast > 0.6) || cast > 1.5){
-		printf("初步判断为色偏，接下来进行色偏分类...\n");
-		castClassification(LABimg, D, M);
-	}
-	else{
-		printf("初步判断为非色偏，接下来进行二次检测...\n");
-		secondTest(LABimg, D, M);
-	}
-	printf("\n");
-	cvWaitKey(0);
+	string srcDir = "/Users/bean/Colorcast";
+	string abnormalDir = srcDir + "/AbnormalSamples";
+	string normalDir = srcDir + "/NormalSamples";
+	string dstPath = srcDir + "/train.txt";
+	ofstream out(dstPath.c_str(), ios::out | ios::app);
+	if (! out.is_open())
+	{ cout << "Error creating output file!!!" << endl; exit (1); }
+	out << "image\tcast\tda\tdb\tD\tM\tcast_NNO\tda_NNO\tdb_NNO\tD_NNO\tM_NNO\tM_cr\tD_cr\tCCI\tlabel" << endl;
+	struct dirent *ptr;
+	string curImg;
+	DIR *abnormalDIR = opendir(abnormalDir.c_str());
+	while((ptr = readdir(abnormalDIR)) != NULL) ///read the list of this dir
+	    {
+			curImg =  ptr->d_name;
+			computeFeatures(abnormalDir + "/" + curImg, dstPath, 1, out);
+	    }
+	closedir(abnormalDIR);
+	DIR *normalDIR = opendir(normalDir.c_str());
+	while((ptr = readdir(normalDIR)) != NULL) ///read the list of this dir
+		{
+			curImg =  ptr->d_name;
+			computeFeatures(normalDir + "/" + curImg, dstPath, 0, out);
+		}
+	closedir(normalDIR);
 	return 0;
 }
