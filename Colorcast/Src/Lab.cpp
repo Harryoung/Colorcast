@@ -248,10 +248,10 @@ void computeFeatures(string srcImgPath, string outputPath, int label, ofstream& 
 
 //主函数
 int main(){
-	string srcDir = "/Users/bean/Colorcast";
+	string srcDir = "/Users/bean/Colorcast/MLP_v2";
 	string abnormalDir = srcDir + "/AbnormalSamples";
 	string normalDir = srcDir + "/NormalSamples";
-	string dstPath = srcDir + "/train.txt";
+	string dstPath = srcDir + "/train.csv";
 	ofstream out(dstPath.c_str(), ios::out);
 	if (! out.is_open())
 	{ cout << "Error creating output file!!!" << endl; exit (1); }
